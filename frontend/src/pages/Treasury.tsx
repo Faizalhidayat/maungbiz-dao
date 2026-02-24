@@ -1,22 +1,30 @@
 import { useMemo } from "react"
-import { useReadContract, useBalance } from "wagmi"
+import {
+  useReadContract,
+  useReadContracts,
+  useBalance,
+} from "wagmi"
 import { formatUnits } from "viem"
 
 import { maungDaoAbi } from "../abi/maungDaoAbi"
 import { DAO_ADDRESS } from "../lib/config"
 
 export default function Treasury() {
-
   // =============================
   // Contract ETH Balance
   // =============================
   const { data: balanceData } = useBalance({
     address: DAO_ADDRESS as `0x${string}`,
-    query: { refetchInterval: 5000 }, // auto refresh
+    query: { refetchInterval: 5000 },
   })
 
   const treasuryBalance = balanceData
-    ? Number(formatUnits(balanceData.value, balanceData.decimals))
+    ? Number(
+        formatUnits(
+          balanceData.value,
+          balanceData.decimals
+        )
+      )
     : 0
 
   // =============================
@@ -28,24 +36,37 @@ export default function Treasury() {
     functionName: "proposalCount",
   })
 
-  const proposalCount = countData ? Number(countData) : 0
+  const proposalCount = countData
+    ? Number(countData)
+    : 0
 
   const proposalIds =
     proposalCount > 0
-      ? Array.from({ length: proposalCount }, (_, i) => i + 1)
+      ? Array.from(
+          { length: proposalCount },
+          (_, i) => i + 1
+        )
       : []
 
   // =============================
-  // Fetch All Proposals
+  // SAFE MULTICALL FETCH
   // =============================
-  const proposals = proposalIds.map((id) =>
-    useReadContract({
-      address: DAO_ADDRESS as `0x${string}`,
-      abi: maungDaoAbi,
-      functionName: "getProposal",
-      args: [BigInt(id)],
-    })
-  )
+  const contracts =
+    proposalIds.length > 0
+      ? proposalIds.map((id) => ({
+          address: DAO_ADDRESS as `0x${string}`,
+          abi: maungDaoAbi,
+          functionName: "getProposal",
+          args: [BigInt(id)],
+        }))
+      : []
+
+  const { data: proposalsData } = useReadContracts({
+    contracts,
+    query: {
+      enabled: contracts.length > 0,
+    },
+  })
 
   // =============================
   // Derived Analytics
@@ -54,16 +75,17 @@ export default function Treasury() {
     let approved = 0
     let released = 0
 
-    proposals.forEach((p) => {
-      if (!p.data) return
-      const proposal = p.data as any
+    proposalsData?.forEach((result) => {
+      if (!result?.result) return
+
+      const proposal = result.result as any
 
       if (proposal.status === 1) approved++
       if (proposal.status === 3) released++
     })
 
     return { approved, released }
-  }, [proposals])
+  }, [proposalsData])
 
   return (
     <div className="space-y-16">
@@ -80,7 +102,6 @@ export default function Treasury() {
 
       {/* TREASURY BALANCE */}
       <div className="glass p-12 text-center space-y-4">
-
         <p className="text-gray-400 text-sm">
           Total Treasury Balance
         </p>
@@ -88,7 +109,6 @@ export default function Treasury() {
         <h2 className="text-5xl font-bold text-green-400">
           {treasuryBalance.toFixed(4)} ETH
         </h2>
-
       </div>
 
       {/* ANALYTICS GRID */}
@@ -122,7 +142,6 @@ export default function Treasury() {
         </div>
 
       </div>
-
     </div>
   )
 }

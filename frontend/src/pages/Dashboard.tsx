@@ -1,5 +1,9 @@
 import { Link } from "react-router-dom"
-import { useBalance, useReadContract } from "wagmi"
+import {
+  useBalance,
+  useReadContract,
+  useReadContracts,
+} from "wagmi"
 import { formatUnits } from "viem"
 import { useMemo } from "react"
 
@@ -9,7 +13,6 @@ import ProposalPreviewCard from "../components/ProposalPreviewCard"
 import AnimatedCounter from "../components/AnimatedCounter"
 
 export default function Dashboard() {
-
   // ===============================
   // Treasury Balance (Live)
   // ===============================
@@ -50,25 +53,37 @@ export default function Dashboard() {
       : []
 
   // ===============================
-  // Fetch Proposals for Stats
+  // SAFE MULTICALL FETCH
   // ===============================
-  const proposals = proposalIds.map((id) =>
-    useReadContract({
-      address: DAO_ADDRESS as `0x${string}`,
-      abi: maungDaoAbi,
-      functionName: "getProposal",
-      args: [BigInt(id)],
-    })
-  )
+  const contracts =
+    proposalIds.length > 0
+      ? proposalIds.map((id) => ({
+          address: DAO_ADDRESS as `0x${string}`,
+          abi: maungDaoAbi,
+          functionName: "getProposal",
+          args: [BigInt(id)],
+        }))
+      : []
 
+  const { data: proposalsData } = useReadContracts({
+    contracts,
+    query: {
+      enabled: contracts.length > 0,
+    },
+  })
+
+  // ===============================
+  // DAO Stats Calculation
+  // ===============================
   const stats = useMemo(() => {
     let active = 0
     let approved = 0
     let released = 0
 
-    proposals.forEach((p) => {
-      if (!p.data) return
-      const proposal = p.data as any
+    proposalsData?.forEach((result) => {
+      if (!result?.result) return
+
+      const proposal = result.result as any
 
       if (proposal.status === 0) active++
       if (proposal.status === 1) approved++
@@ -76,12 +91,12 @@ export default function Dashboard() {
     })
 
     return { active, approved, released }
-  }, [proposals])
+  }, [proposalsData])
 
   return (
     <div className="space-y-24">
 
-      {/* ================= HERO ================= */}
+      {/* HERO */}
       <div className="glass p-16 flex justify-between items-center">
 
         <div className="max-w-xl">
@@ -94,7 +109,6 @@ export default function Dashboard() {
           </p>
 
           <div className="mt-8 flex gap-4">
-
             <Link
               to="/apply"
               className="px-6 py-3 bg-purple-600 rounded-lg hover:bg-purple-700 transition"
@@ -108,7 +122,6 @@ export default function Dashboard() {
             >
               Governance
             </Link>
-
           </div>
         </div>
 
@@ -121,37 +134,18 @@ export default function Dashboard() {
             <AnimatedCounter value={treasuryBalance} /> ETH
           </h2>
         </div>
-
       </div>
 
-      {/* ================= DAO METRICS ================= */}
+      {/* DAO METRICS */}
       <div className="grid grid-cols-4 gap-6">
-
-        <MetricCard
-          title="Total Proposals"
-          value={proposalCount}
-        />
-
-        <MetricCard
-          title="Active"
-          value={stats.active}
-        />
-
-        <MetricCard
-          title="Approved"
-          value={stats.approved}
-        />
-
-        <MetricCard
-          title="Released"
-          value={stats.released}
-        />
-
+        <MetricCard title="Total Proposals" value={proposalCount} />
+        <MetricCard title="Active" value={stats.active} />
+        <MetricCard title="Approved" value={stats.approved} />
+        <MetricCard title="Released" value={stats.released} />
       </div>
 
-      {/* ================= LIVE PROPOSAL PREVIEW ================= */}
+      {/* PROPOSAL PREVIEW */}
       <div className="space-y-6">
-
         <h2 className="text-2xl font-semibold">
           Latest Proposals
         </h2>
@@ -167,18 +161,13 @@ export default function Dashboard() {
             .slice(-4)
             .reverse()
             .map((id) => (
-              <ProposalPreviewCard
-                key={id}
-                id={id}
-              />
+              <ProposalPreviewCard key={id} id={id} />
             ))}
         </div>
-
       </div>
 
-      {/* ================= CTA ================= */}
+      {/* CTA */}
       <div className="glass p-16 text-center space-y-6">
-
         <h2 className="text-3xl font-bold">
           Participate in Governance
         </h2>
@@ -194,9 +183,7 @@ export default function Dashboard() {
         >
           View All Proposals
         </Link>
-
       </div>
-
     </div>
   )
 }

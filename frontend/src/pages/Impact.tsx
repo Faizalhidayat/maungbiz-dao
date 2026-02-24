@@ -1,5 +1,8 @@
 import { useMemo } from "react"
-import { useReadContract } from "wagmi"
+import {
+  useReadContract,
+  useReadContracts,
+} from "wagmi"
 import { formatUnits } from "viem"
 import {
   PieChart,
@@ -14,31 +17,51 @@ import { DAO_ADDRESS } from "../lib/config"
 import AnimatedCounter from "../components/AnimatedCounter"
 
 export default function Impact() {
-
+  // ===============================
+  // Proposal Count
+  // ===============================
   const { data: countData } = useReadContract({
     address: DAO_ADDRESS as `0x${string}`,
     abi: maungDaoAbi,
     functionName: "proposalCount",
   })
 
-  const proposalCount = countData ? Number(countData) : 0
+  const proposalCount = countData
+    ? Number(countData)
+    : 0
 
   const proposalIds =
     proposalCount > 0
-      ? Array.from({ length: proposalCount }, (_, i) => i + 1)
+      ? Array.from(
+          { length: proposalCount },
+          (_, i) => i + 1
+        )
       : []
 
-  const proposals = proposalIds.map((id) =>
-    useReadContract({
-      address: DAO_ADDRESS as `0x${string}`,
-      abi: maungDaoAbi,
-      functionName: "getProposal",
-      args: [BigInt(id)],
-    })
-  )
+  // ===============================
+  // SAFE MULTICALL FETCH
+  // ===============================
+  const contracts =
+    proposalIds.length > 0
+      ? proposalIds.map((id) => ({
+          address: DAO_ADDRESS as `0x${string}`,
+          abi: maungDaoAbi,
+          functionName: "getProposal",
+          args: [BigInt(id)],
+        }))
+      : []
 
+  const { data: proposalsData } = useReadContracts({
+    contracts,
+    query: {
+      enabled: contracts.length > 0,
+    },
+  })
+
+  // ===============================
+  // Derived Impact Analytics
+  // ===============================
   const impact = useMemo(() => {
-
     let totalRequested = 0
     let totalApproved = 0
     let totalReleased = 0
@@ -46,10 +69,10 @@ export default function Impact() {
     let approvedCount = 0
     let rejectedCount = 0
 
-    proposals.forEach((p) => {
-      if (!p.data) return
+    proposalsData?.forEach((result) => {
+      if (!result?.result) return
 
-      const proposal = p.data as any
+      const proposal = result.result as any
       const requested = Number(
         formatUnits(proposal.requestedAmount, 18)
       )
@@ -79,8 +102,7 @@ export default function Impact() {
       approvedCount,
       rejectedCount,
     }
-
-  }, [proposals])
+  }, [proposalsData])
 
   const donutData = [
     { name: "Approved", value: impact.approvedCount },
@@ -104,25 +126,21 @@ export default function Impact() {
 
       {/* CAPITAL METRICS */}
       <div className="grid grid-cols-3 gap-8">
-
         <ImpactCard
           title="Total Capital Requested"
           value={impact.totalRequested}
           suffix=" ETH"
         />
-
         <ImpactCard
           title="Capital Approved"
           value={impact.totalApproved}
           suffix=" ETH"
         />
-
         <ImpactCard
           title="Capital Released"
           value={impact.totalReleased}
           suffix=" ETH"
         />
-
       </div>
 
       {/* JOB IMPACT */}
@@ -138,13 +156,12 @@ export default function Impact() {
 
       {/* DONUT CHART */}
       <div className="glass p-12 space-y-6">
-
         <h2 className="text-xl font-semibold">
           Proposal Outcome Distribution
         </h2>
 
-        {impact.approvedCount === 0 &&
-         impact.rejectedCount === 0 && (
+        {(impact.approvedCount === 0 &&
+          impact.rejectedCount === 0) && (
           <div className="text-gray-400">
             No finalized proposals yet.
           </div>
@@ -152,7 +169,6 @@ export default function Impact() {
 
         {(impact.approvedCount > 0 ||
           impact.rejectedCount > 0) && (
-
           <div style={{ width: "100%", height: 300 }}>
             <ResponsiveContainer>
               <PieChart>
@@ -163,9 +179,9 @@ export default function Impact() {
                   paddingAngle={5}
                   dataKey="value"
                 >
-                  {donutData.map((entry, index) => (
+                  {donutData.map((_, index) => (
                     <Cell
-                      key={`cell-${index}`}
+                      key={index}
                       fill={COLORS[index]}
                     />
                   ))}
@@ -174,11 +190,8 @@ export default function Impact() {
               </PieChart>
             </ResponsiveContainer>
           </div>
-
         )}
-
       </div>
-
     </div>
   )
 }
