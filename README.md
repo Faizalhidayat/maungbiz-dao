@@ -23,7 +23,9 @@ Submit → Vote → Finalize → Release
 ### Run frontend
 
 cd frontend
+
 npm install
+
 npm run dev
 
 
